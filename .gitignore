@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+*.egg
+
+# Node
+node_modules/
+.next/
+out/
+build/
+
+# Environment secrets — NEVER commit these
+.env
+.env.local
+.env.production
+
+# Database (regenerate with ingest.py)
+data/o2c.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.env

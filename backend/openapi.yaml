@@ -1,0 +1,479 @@
+openapi: 3.0.3
+info:
+  title: SAP O2C Graph API
+  version: 1.0.0
+  description: |
+    Contract for the Order-to-Cash graph intelligence backend.
+    Supports graph visualization, chat query execution, node lookup, search, and stats.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development
+  - url: https://your-backend-domain.example.com
+    description: Production (replace with actual URL)
+tags:
+  - name: Health
+  - name: Graph
+  - name: Query
+  - name: Nodes
+  - name: Search
+paths:
+  /:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getRoot
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: SAP O2C Graph API
+  /api/graph:
+    get:
+      tags: [Graph]
+      summary: Get graph nodes and edges
+      operationId: getGraph
+      parameters:
+        - name: groups
+          in: query
+          required: false
+          description: Comma-separated node groups to include (frontend usage).
+          schema:
+            type: string
+            example: order,delivery,billing,journal,payment,customer
+        - name: group
+          in: query
+          required: false
+          description: Single node group filter (backend native).
+          schema:
+            type: string
+            example: order
+        - name: limit
+          in: query
+          required: false
+          description: Maximum nodes to return.
+          schema:
+            type: integer
+            default: 800
+            minimum: 1
+      responses:
+        '200':
+          description: Graph payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphResponse'
+              examples:
+                graphExample:
+                  value:
+                    nodes:
+                      - id: SalesOrder:740542
+                        label: SalesOrder
+                        displayId: "740542"
+                        group: order
+                        props:
+                          Order ID: "740542"
+                          Customer: "320000083"
+                          Amount: "Rs.12,500.00"
+                          Currency: INR
+                          Delivery Status: C
+                          Created: "2025-03-31"
+                      - id: Delivery:80700012
+                        label: Delivery
+                        displayId: "80700012"
+                        group: delivery
+                        props:
+                          Delivery ID: "80700012"
+                          Goods Movement: C
+                          Picking: C
+                          Shipping Point: SP01
+                          Created: "2025-03-31"
+                    edges:
+                      - source: SalesOrder:740542
+                        target: Delivery:80700012
+                        relation: FULFILLED_BY
+  /api/graph/stats:
+    get:
+      tags: [Graph]
+      summary: Get graph statistics (backend native shape)
+      operationId: getGraphStats
+      responses:
+        '200':
+          description: Graph stats with counts by group/relation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphStatsResponse'
+              examples:
+                graphStats:
+                  value:
+                    node_count: 600
+                    edge_count: 1200
+                    by_group:
+                      order: 100
+                      delivery: 86
+                      billing: 163
+                      journal: 123
+                      payment: 120
+                      customer: 8
+                    by_relation:
+                      PLACED_BY: 100
+                      FULFILLED_BY: 86
+                      BILLED_AS: 163
+                      POSTED_TO: 123
+                      CLEARED_BY: 120
+  /api/stats:
+    get:
+      tags: [Graph]
+      summary: Get normalized stats for frontend KPI bars
+      description: Optional endpoint. If unavailable, frontend falls back to /api/graph/stats.
+      operationId: getNormalizedStats
+      responses:
+        '200':
+          description: Normalized KPI stat shape
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizedStatsResponse'
+              examples:
+                normalizedStats:
+                  value:
+                    salesOrders: 100
+                    deliveries: 86
+                    billingDocuments: 163
+                    journalEntries: 123
+                    payments: 120
+                    customers: 8
+                    totalRevenue: 2450000
+        '404':
+          description: Endpoint not implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/node/{node_id}:
+    get:
+      tags: [Nodes]
+      summary: Get one node and its neighbors
+      operationId: getNode
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          description: Full node identifier including prefix (e.g. SalesOrder:740542)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node + neighboring relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDetailsResponse'
+              examples:
+                nodeDetails:
+                  value:
+                    node:
+                      id: SalesOrder:740542
+                      label: SalesOrder
+                      displayId: "740542"
+                      group: order
+                      props:
+                        Customer: "320000083"
+                    neighbors:
+                      - direction: out
+                        relation: FULFILLED_BY
+                        node:
+                          id: Delivery:80700012
+                          label: Delivery
+                          displayId: "80700012"
+                          group: delivery
+                          props:
+                            Shipping Point: SP01
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  value:
+                    detail: Node not found
+  /api/query:
+    post:
+      tags: [Query]
+      summary: Ask a natural language O2C question
+      operationId: postQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+            examples:
+              topProducts:
+                value:
+                  message: Which products appear in the most billing documents?
+                  history:
+                    - role: user
+                      content: Show me sales trends
+                    - role: assistant
+                      content: What period do you want?
+              listOrders:
+                value:
+                  message: give list of orders
+                  history: []
+      responses:
+        '200':
+          description: Query answer with optional SQL and highlight IDs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+              examples:
+                successTopProducts:
+                  value:
+                    answer: |
+                      Products appearing in the most billing documents (top 10):
+                      - S8907367008620 (FACESERUM 30ML VIT C): 22 billing documents
+                      - S8907367039280 (SUNSCREEN GEL SPF50-PA+++ 50ML): 22 billing documents
+                    sql_query: SELECT bi.material AS product, COUNT(DISTINCT bi.billingDocument) AS billing_document_count ...
+                    highlight_ids:
+                      - Product:S8907367008620
+                      - Product:S8907367039280
+                domainGuarded:
+                  value:
+                    answer: |
+                      This system is designed to answer questions related to the SAP Order-to-Cash dataset only.
+                    sql_query: null
+                    highlight_ids: []
+        '400':
+          description: Bad request (e.g., empty message)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emptyMessage:
+                  value:
+                    detail: Empty message
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Search nodes by ID/label/properties
+      operationId: searchNodes
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Search text
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+      responses:
+        '200':
+          description: Matched graph nodes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GraphNode'
+              examples:
+                searchResults:
+                  value:
+                    results:
+                      - id: BillingDocument:91150083
+                        label: BillingDocument
+                        displayId: "91150083"
+                        group: billing
+                        props:
+                          Customer: "320000083"
+                          Amount: "Rs.4,100.00"
+components:
+  schemas:
+    GraphNode:
+      type: object
+      required: [id, label, displayId, group, props]
+      properties:
+        id:
+          type: string
+          example: SalesOrder:740542
+        label:
+          type: string
+          example: SalesOrder
+        displayId:
+          type: string
+          example: "740542"
+        group:
+          type: string
+          example: order
+        props:
+          type: object
+          additionalProperties:
+            type: string
+    GraphEdge:
+      type: object
+      required: [source, target, relation]
+      properties:
+        source:
+          type: string
+          example: SalesOrder:740542
+        target:
+          type: string
+          example: Delivery:80700012
+        relation:
+          type: string
+          example: FULFILLED_BY
+    GraphResponse:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+    GraphStatsResponse:
+      type: object
+      required: [node_count, edge_count, by_group, by_relation]
+      properties:
+        node_count:
+          type: integer
+        edge_count:
+          type: integer
+        by_group:
+          type: object
+          additionalProperties:
+            type: integer
+        by_relation:
+          type: object
+          additionalProperties:
+            type: integer
+    NormalizedStatsResponse:
+      type: object
+      required:
+        - salesOrders
+        - deliveries
+        - billingDocuments
+        - journalEntries
+        - payments
+        - customers
+        - totalRevenue
+      properties:
+        salesOrders:
+          type: integer
+          example: 100
+        deliveries:
+          type: integer
+          example: 86
+        billingDocuments:
+          type: integer
+          example: 163
+        journalEntries:
+          type: integer
+          example: 123
+        payments:
+          type: integer
+          example: 120
+        customers:
+          type: integer
+          example: 8
+        totalRevenue:
+          type: number
+          format: double
+          example: 2450000
+    Neighbor:
+      type: object
+      required: [direction, relation, node]
+      properties:
+        direction:
+          type: string
+          enum: [in, out]
+        relation:
+          type: string
+        node:
+          $ref: '#/components/schemas/GraphNode'
+    NodeDetailsResponse:
+      type: object
+      required: [node, neighbors]
+      properties:
+        node:
+          $ref: '#/components/schemas/GraphNode'
+        neighbors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Neighbor'
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+    QueryRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          example: Trace billing document 91150083
+        history:
+          type: array
+          default: []
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+    QueryResponse:
+      type: object
+      required: [answer, highlight_ids]
+      properties:
+        answer:
+          type: string
+        sql_query:
+          type: string
+          nullable: true
+        highlight_ids:
+          type: array
+          items:
+            type: string
+          example:
+            - BillingDocument:91150083
+            - Delivery:80700012
+            - SalesOrder:740542
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
