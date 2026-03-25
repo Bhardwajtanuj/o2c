@@ -31,3 +31,5 @@ Thumbs.db
 *.swp
 .env
 .env
+
+!data/o2c.db
