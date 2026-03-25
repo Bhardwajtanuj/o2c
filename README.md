@@ -1,6 +1,6 @@
 # SAP Order-to-Cash (O2C) Graph Intelligence System
 
-A graph-based data exploration and natural language query system built on the SAP O2C dataset. Converts fragmented JSONL business data into a queryable knowledge graph with interactive visualization and an LLM-powered chat interface.
+A graph-based data exploration and natural language query system built on the SAP O2C dataset. Converts fragmented business data into a queryable knowledge graph with interactive visualization and an LLM-powered chat interface.
 
 ---
 
@@ -8,16 +8,55 @@ A graph-based data exploration and natural language query system built on the SA
 
 | Service  | URL |
 |----------|-----|
-| Frontend | Deploy on Vercel (free) — see Deployment section |
-| Backend  | Deploy on Render (free) — see Deployment section |
-| API Docs | `https://<your-render-app>.onrender.com/docs` |
+| Frontend | https://o2c-frontend-lilac.vercel.app/ |
+| Backend API | https://o2c-lhrn.onrender.com |
+| API Docs | https://o2c-lhrn.onrender.com/docs |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Graph Visualization | react-force-graph-2d, D3-force |
+| UI Components | Radix UI, shadcn/ui, MUI |
+| Backend | Python 3, FastAPI, Uvicorn |
+| Database | SQLite (in-memory graph + persistent storage) |
+| LLM Provider | OpenRouter (free tier) — `google/gemini-flash-1.5-8b` |
+| Deployment | Render.com (backend), Vercel (frontend) |
+
+---
+
+## AI Tools Used
+
+### Frontend
+- **Google Stitch** — UI prototyping and component layout
+- **Figma** — Design mockups and visual reference
+- **Google Gemini** — Component logic and styling suggestions
+
+### Backend
+- **Claude (Anthropic)** — Architecture design, FastAPI structure, prompt engineering
+- **Perplexity** — Research on graph modeling patterns and SQLite optimization
+- **ChatGPT** — Debugging and alternative approach exploration
+- **Google Gemini** — SQL generation prompt refinement
+
+### General Development
+- **Cursor** — Primary IDE with AI-assisted code completion
+- **Claude Code** — Agentic coding sessions (see `ai-sessions/`)
+- **GitHub Copilot** — Inline code suggestions
+- **Windsurf** — Code navigation and refactoring
+- **Anthropic Codex** — Prompt and guardrail iteration
+
+> Session logs are available in the `ai-sessions/` folder as required by the submission guidelines.
 
 ---
 
 ## Quick Start (Local)
 
 ```bash
-# 1. Clone the repo and enter the project
+# 1. Clone the repo
+git clone https://github.com/Bhardwajtanuj/o2c.git
 cd o2c
 
 # 2. Add your OpenRouter API key (free at https://openrouter.ai)
@@ -32,8 +71,7 @@ bash run.sh
 - **Backend API**: http://localhost:8000
 - **Swagger docs**: http://localhost:8000/docs
 
-> **Note**: `data/o2c.db` is included. If you have the original JSONL files, re-ingest with:
-> `python ingest/ingest.py`
+> `data/o2c.db` is pre-ingested and included. To re-ingest from raw JSONL files: `python ingest/ingest.py`
 
 ---
 
@@ -94,7 +132,7 @@ Browser (Vite + React)
 
 ## Example Queries
 
-The system handles these natively (no LLM API call needed):
+The system handles these natively without an LLM API call:
 
 | Query | Type |
 |---|---|
@@ -109,7 +147,7 @@ The system handles these natively (no LLM API call needed):
 | `Trace order 740506` | Order → Delivery → Billing → JE → Payment |
 | `Give me an overview of the order-to-cash flow` | Dataset summary |
 
-For other questions, the LLM generates SQL dynamically using the full schema context.
+For all other questions, the LLM generates SQL dynamically using the full schema context.
 
 ---
 
@@ -128,35 +166,10 @@ User: "Trace billing document 91150083"
 → Full O2C chain answer ✓
 ```
 
-Guardrail layers:
-1. **Regex patterns**: poems, stories, jokes, geography, math, etc.
-2. **Domain keyword check**: O2C terminology must be present for longer messages
-3. **Numeric ID detection**: 6-10 digit numbers always allowed (document IDs)
-
----
-
-## Deployment
-
-### Backend → Render.com (free)
-
-1. Push repo to GitHub
-2. New Web Service on Render → connect repo
-3. **Build command**: `pip install -r backend/requirements.txt`
-4. **Start command**: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
-5. **Root directory**: `o2c`
-6. **Environment variables**:
-   - `OPENROUTER_API_KEY` = your key
-   - `DB_PATH` = `./data/o2c.db`
-   - `LLM_MODEL` = `google/gemini-flash-1.5-8b`
-
-### Frontend → Vercel (free)
-
-1. New Project on Vercel → import repo
-2. **Framework**: Vite
-3. **Root directory**: `o2c/frontend`
-4. **Build command**: `npm run build`
-5. **Output directory**: `dist`
-6. **Environment variable**: `VITE_API_URL` = `https://your-render-app.onrender.com`
+Three-layer guardrail system (`guardrails.py`):
+1. **Regex patterns** — blocks poems, stories, jokes, geography, math, general knowledge
+2. **Domain keyword check** — O2C terminology must be present for messages longer than 3 words
+3. **Numeric ID detection** — 6–10 digit numbers always allowed (document IDs)
 
 ---
 
@@ -165,26 +178,24 @@ Guardrail layers:
 **SQL Generation** (`prompts.py → SQL_GENERATION_PROMPT`):
 - Full schema injected (all 16 tables + columns)
 - Key join relationships listed explicitly
-- Strict instruction: output only SELECT, no markdown
+- Strict instruction: output only a valid SQLite SELECT, no markdown
 
 **Answer Synthesis** (`prompts.py → ANSWER_SYNTHESIS_PROMPT`):
-- Results JSON passed directly
-- Instruction to use ONLY provided data (no hallucination)
-- Last 6 messages of conversation history included
+- Query results JSON passed directly to the model
+- Instruction to use ONLY provided data — no hallucination
+- Last 6 messages of conversation history included for context
 
-**Two-step pipeline** reduces LLM calls: the `LocalDataEngine` handles ~10 common query patterns instantly without any API call.
+**Two-step pipeline** reduces LLM API calls significantly: the `LocalDataEngine` handles ~10 common query patterns instantly with no API call at all.
 
 ---
 
 ## Database Choice
 
-**SQLite** — chosen because:
-- Zero infrastructure (single file, bundled with the app)
-- The dataset is ~1,000 rows, well within SQLite limits
+**SQLite** was chosen because:
+- Zero infrastructure — single file bundled with the app
+- The dataset is ~1,000 rows, well within SQLite's limits
 - Full SQL expressiveness for complex JOINs and aggregations
-- The graph is built in-memory from SQLite at startup (fast, no separate graph DB needed)
-
-The in-memory graph (`GraphDB`) is built once on startup from SQLite and kept in RAM for O(1) node lookups and neighbor traversal.
+- The in-memory graph (`GraphDB`) is built once at startup from SQLite for O(1) node lookups and neighbor traversal — no separate graph database needed
 
 ---
 
@@ -210,15 +221,37 @@ o2c/
 │       │   ├── MetricCard.tsx          # Stats header cards
 │       │   └── Sidebar.tsx
 │       └── utils/
-│           ├── mockApi.ts     # REST client for backend
-│           └── queryIntent.ts # Client-side query routing
+│           ├── mockApi.ts              # REST client for backend
+│           └── queryIntent.ts         # Client-side query routing
 ├── data/
-│   ├── o2c.db       # SQLite database (pre-ingested)
-│   └── schema.txt   # Table schema for LLM context
+│   ├── o2c.db           # SQLite database (pre-ingested)
+│   └── schema.txt       # Table schema for LLM context
 ├── ingest/
-│   └── ingest.py    # JSONL → SQLite ingestion script
-├── ai-sessions/     # AI coding session logs
+│   └── ingest.py        # JSONL → SQLite ingestion script
+├── ai-sessions/         # AI coding session logs (required by submission)
+│   ├── session-01-schema-design.md
+│   ├── session-02-prompt-engineering.md
+│   └── session-03-guardrails.md
 ├── .env.example
-├── run.sh           # One-command local startup
+├── render.yaml          # Render.com deployment config
+├── run.sh               # One-command local startup
 └── README.md
 ```
+
+---
+
+## Deployment
+
+### Backend → Render.com
+
+- **Build command**: `pip install -r backend/requirements.txt`
+- **Start command**: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+- **Environment variables**: `OPENROUTER_API_KEY`, `DB_PATH=/opt/render/project/src/data/o2c.db`, `LLM_MODEL=google/gemini-flash-1.5-8b`
+
+### Frontend → Vercel
+
+- **Root directory**: `frontend`
+- **Framework**: Vite
+- **Build command**: `npm run build`
+- **Output directory**: `dist`
+- **Environment variable**: `VITE_API_URL=https://o2c-lhrn.onrender.com`
