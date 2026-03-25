@@ -43,6 +43,7 @@ A graph-based data exploration and natural language query system built on the SA
 
 ### General Development
 - **Cursor** — Primary IDE with AI-assisted code completion
+- **Google Antigravity** — Secondary IDE with AI-assisted code completion and code pipiline connecting and local run,testing
 - **Claude Code** — Agentic coding sessions (see `ai-sessions/`)
 - **GitHub Copilot** — Inline code suggestions
 - **Windsurf** — Code navigation and refactoring
